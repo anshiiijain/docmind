@@ -1,7 +1,7 @@
 import os
 import uuid
 from pathlib import Path
-
+from config import settings
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from sentence_transformers import SentenceTransformer
@@ -31,26 +31,16 @@ def load_document(file_path: str) -> list:
         raise ValueError(f"Unsupported file type: {ext}. Use PDF or TXT.")
 
     return loader.load()
-
+#
 
 def chunk_documents(documents: list) -> list:
-    """
-    Split documents into smaller overlapping chunks.
-
-    chunk_size=500: each chunk is ~500 characters
-    chunk_overlap=50: last 50 chars of chunk N are also start of chunk N+1
-                      this prevents cutting a sentence mid-thought
-
-    RecursiveCharacterTextSplitter tries these separators IN ORDER:
-    ["\n\n", "\n", " ", ""] — prefers paragraph breaks over word breaks
-    """
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size=500,
-        chunk_overlap=50,
+        chunk_size=settings.chunk_size,
+        chunk_overlap=settings.chunk_overlap,
         length_function=len,
     )
-    chunks = splitter.split_documents(documents)
-    return chunks
+    return splitter.split_documents(documents)
+#
 
 
 def embed_and_store(chunks: list, filename: str) -> int:

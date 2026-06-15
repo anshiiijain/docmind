@@ -1,10 +1,9 @@
 import os
-from dotenv import load_dotenv
+from config import settings
 
-load_dotenv()
+LLM_PROVIDER = settings.llm_provider
+LLM_MODEL    = settings.llm_model
 
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")
-LLM_MODEL    = os.getenv("LLM_MODEL", "gpt-3.5-turbo")
 
 
 # ── Prompt Assembly ────────────────────────────────────────────────────────────
@@ -111,6 +110,42 @@ def call_ollama(messages: list) -> str:
     return response.json()["message"]["content"]
 
 
+def format_sources(chunks: list) -> list:
+    """
+    Clean up and deduplicate sources for the frontend.
+
+    Problem: if 3 chunks come from page 2 of the same PDF,
+    we don't want to show the same source 3 times.
+    Solution: group by (filename, page), keep best (lowest) distance.
+
+    Also: truncate snippet to a readable length and clean whitespace.
+    """
+    seen = {}  # key: (source, page) → best chunk
+
+    for chunk in chunks:
+        key = (chunk["source"], chunk["page"])
+        # Keep the chunk with lowest distance (most relevant)
+        if key not in seen or chunk["distance"] < seen[key]["distance"]:
+            seen[key] = chunk
+
+    sources = []
+    for (source, page), chunk in seen.items():
+        # Clean the snippet: collapse whitespace, trim to 200 chars
+        snippet = " ".join(chunk["text"].split())[:200]
+        sources.append({
+            "source":    source,
+            "page":      page,
+            "snippet":   snippet,
+            "relevance": round(1 - chunk["distance"], 3),
+            # relevance: 1.0 = perfect match, 0.0 = no match
+            # easier for frontend to display than raw distance
+        })
+
+    # Sort by relevance descending
+    return sorted(sources, key=lambda x: x["relevance"], reverse=True)
+
+
+
 def ask_llm(question: str, chunks: list, history: list = None) -> dict:
     """
     Main entry point. Retrieves context, builds prompt, calls LLM.
@@ -137,11 +172,7 @@ def ask_llm(question: str, chunks: list, history: list = None) -> dict:
 
     return {
         "answer": answer,
-        # Return sources so frontend can show citations
-        "sources": [
-            {"source": c["source"], "page": c["page"], "snippet": c["text"][:150]}
-            for c in relevant_chunks
-        ],
+        "sources": format_sources(relevant_chunks),
     }
 
 from typing import Generator
@@ -215,3 +246,5 @@ def stream_llm(question: str, chunks: list, history: list = None) -> Generator:
         yield from stream_ollama(messages)
     else:
         raise ValueError(f"Unknown LLM_PROVIDER: {LLM_PROVIDER}")
+    
+# Add this function to llm.py

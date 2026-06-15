@@ -1,19 +1,13 @@
 import chromadb
-from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
+from config import settings
 
-# PersistentClient saves to disk — survives restarts
-# If you use Client() instead, data is lost on restart
-client = chromadb.PersistentClient(path="./chroma_db")
+client = chromadb.PersistentClient(path=settings.chroma_path)
 
-def get_collection(name: str = "documents"):
-    """
-    get_or_create means: if collection exists, return it.
-    If not, create it fresh. Safe to call every time.
-    """
+def get_collection(name: str = None):
     return client.get_or_create_collection(
-        name=name,
-        metadata={"hnsw:space": "cosine"}  # use cosine similarity (not L2)
+        name=name or settings.collection_name,
+        metadata={"hnsw:space": "cosine"}
     )
 
 
