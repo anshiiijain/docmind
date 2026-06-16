@@ -19,7 +19,7 @@ export default function DashboardLayout({
     <div className="flex h-screen bg-canvas">
       <aside className="w-56 bg-s1 border-r border-hairline flex flex-col">
         <div className="p-6 border-b border-hairline">
-          <span className="font-semibold tracking-tight text-ink">IntelliHub</span>
+          <span className="font-semibold tracking-tight text-ink">DocMind</span>
         </div>
 
         <nav className="flex-1 p-4 space-y-1">

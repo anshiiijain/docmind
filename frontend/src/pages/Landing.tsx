@@ -68,7 +68,7 @@ export default function Landing() {
       {/* Footer */}
       <footer className="border-t border-hairline py-8">
         <div className="max-w-5xl mx-auto px-6 flex items-center justify-between">
-          <span className="text-sm font-medium text-ink">IntelliHub</span>
+          <span className="text-sm font-medium text-ink">DocMind</span>
           <span className="text-sm text-ink-tertiary">
             © {new Date().getFullYear()} All rights reserved
           </span>

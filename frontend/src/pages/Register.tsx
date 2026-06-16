@@ -27,7 +27,7 @@ export default function Register() {
       { id: '1', name: form.name, email: form.email, createdAt: new Date().toISOString() },
       'mock-token'
     )
-    toast.success('Account created! Welcome to IntelliHub.')
+    toast.success('Account created! Welcome to DocMind.')
     navigate('/dashboard')
     setLoading(false)
   }

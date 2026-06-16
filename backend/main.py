@@ -154,10 +154,13 @@ async def upload_file(file: UploadFile = File(...)):
 
     # Run ingestion
     result = ingest_file(save_path)
+
     if result["status"] == "error":
-        # Clean up the saved file if ingestion failed
         os.remove(save_path)
         raise HTTPException(status_code=500, detail=result["error"])
+
+    if result["status"] == "duplicate":
+        raise HTTPException(status_code=409, detail=result["message"])
 
     logger.info(f"Ingestion complete: {file.filename} → {result['chunks_stored']} chunks")
     return result

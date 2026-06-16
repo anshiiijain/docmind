@@ -90,6 +90,16 @@ def ingest_file(file_path: str) -> dict:
     """
     filename = Path(file_path).name
 
+    collection = get_collection()
+    existing = collection.get(where={"source": filename})
+    if existing["ids"]:
+        return {
+            "status":        "duplicate",
+            "filename":      filename,
+            "chunks_stored": 0,
+            "message":       f"{filename} is already indexed. Delete it first to re-upload.",
+        }
+    
     try:
         print(f"Loading {filename}...")
         documents = load_document(file_path)

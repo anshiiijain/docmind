@@ -189,7 +189,7 @@ export default function Chat() {
         <div className="flex gap-2">
           <textarea
             value={input}
-            onChange={e => setInput(e.target.value)}
+            onChange={e => {if (e.target.value.length <= 2000) {setInput(e.target.value)}}}
             onKeyDown={handleKeyDown}
             placeholder="Ask a question about your documents... (Enter to send)"
             disabled={isStreaming}
@@ -198,6 +198,9 @@ export default function Chat() {
                        text-sm focus:outline-none focus:ring-2 focus:ring-blue-500
                        disabled:opacity-50 disabled:bg-gray-50"
           />
+          <p className="text-xs text-gray-400 mt-2">
+            {input.length}/2000 · Shift+Enter for new line · Enter to send
+          </p>
 
           {isStreaming ? (
             <button
