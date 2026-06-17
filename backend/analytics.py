@@ -286,3 +286,157 @@ def get_doc_stats(filename: str) -> dict:
         "reading_time_mins": max(1, word_count // 200),
         "language":          language,
     }
+
+# ── Summarization ──────────────────────────────────────────────────────────────
+
+from llm import call_openai, call_ollama
+from config import settings
+
+# Simple in-memory cache so we don't re-summarize the same doc every request.
+# Key: filename, Value: summary dict.
+# This resets when the server restarts — fine for a solo project.
+_summary_cache: dict[str, dict] = {}
+
+
+def _call_llm_simple(prompt: str) -> str:
+    """
+    Thin wrapper to call whichever LLM provider is configured.
+    Reuses the same provider setting from llm.py — one config, one source of truth.
+    """
+    messages = [{"role": "user", "content": prompt}]
+
+    if settings.llm_provider == "openai":
+        return call_openai(messages)
+    elif settings.llm_provider == "ollama":
+        return call_ollama(messages)
+    else:
+        raise ValueError(f"Unknown LLM_PROVIDER: {settings.llm_provider}")
+
+
+def _group_chunks(chunks: list[str], group_size: int = 20) -> list[str]:
+    """
+    Group chunks into batches before summarizing.
+
+    Why group instead of summarizing each chunk individually?
+    A single 500-char chunk doesn't have much to summarize — it's already short.
+    Grouping ~20 chunks (~10,000 chars) gives the LLM enough context to produce
+    a meaningful summary per group, and keeps each LLM call within token limits.
+    """
+    groups = []
+    for i in range(0, len(chunks), group_size):
+        group_text = " ".join(chunks[i:i + group_size])
+        groups.append(group_text)
+    return groups
+
+
+def get_summary(filename: str, force_refresh: bool = False) -> dict:
+    """
+    Generate a summary of the document using map-reduce.
+
+    MAP step:    each group of chunks → one summary
+    REDUCE step: all group summaries → one final summary + key points
+
+    For small docs (< 20 chunks), skip map-reduce entirely — just summarize directly.
+    This avoids unnecessary LLM calls for short documents.
+    """
+    # Return cached result if available — summarization is expensive, don't repeat it
+    if not force_refresh and filename in _summary_cache:
+        return _summary_cache[filename]
+
+    chunks = get_chunks_for_doc(filename)
+
+    if not chunks:
+        return {"error": f"No chunks found for {filename}"}
+
+    try:
+        if len(chunks) <= 20:
+            # Small doc — summarize directly, no map-reduce needed
+            full_text = " ".join(chunks)
+            final_summary = _summarize_text(full_text, is_final=True)
+        else:
+            # MAP step: summarize each group of ~20 chunks
+            groups = _group_chunks(chunks, group_size=20)
+            group_summaries = []
+
+            for i, group_text in enumerate(groups):
+                summary = _summarize_text(group_text, is_final=False)
+                group_summaries.append(summary)
+
+            # REDUCE step: summarize the summaries into one final summary
+            combined = " ".join(group_summaries)
+            final_summary = _summarize_text(combined, is_final=True)
+
+        # Extract key points as a separate LLM call — gives cleaner bullet points
+        # than trying to extract them from the prose summary with string parsing
+        key_points = _extract_key_points(final_summary)
+
+        result = {
+            "filename":     filename,
+            "summary":      final_summary,
+            "key_points":   key_points,
+            "chunks_used":  len(chunks),
+            "from_cache":   False,
+        }
+
+        _summary_cache[filename] = {**result, "from_cache": True}
+        return result
+
+    except Exception as e:
+        return {"error": f"Summarization failed: {str(e)}"}
+
+
+def _summarize_text(text: str, is_final: bool) -> str:
+    """
+    Single LLM call to summarize a block of text.
+
+    is_final=True:  produce a polished, complete summary (this is shown to the user)
+    is_final=False: produce a rougher intermediate summary (used as input to next step)
+
+    Truncate input to ~12000 chars (~3000 tokens) to stay within context limits
+    and keep costs predictable.
+    """
+    text = text[:12000]
+
+    if is_final:
+        prompt = f"""Summarize the following text in 3-4 clear, well-written sentences.
+Focus on the main ideas and overall purpose. Write for someone who hasn't read the document.
+
+TEXT:
+{text}
+
+SUMMARY:"""
+    else:
+        prompt = f"""Summarize the following text in 2-3 sentences, capturing the key points only.
+
+TEXT:
+{text}
+
+SUMMARY:"""
+
+    return _call_llm_simple(prompt).strip()
+
+
+def _extract_key_points(summary: str) -> list[str]:
+    """
+    Ask the LLM to turn the summary into 3-5 bullet points.
+    Separate call (not parsed from the summary) because asking the LLM
+    directly for a list format is more reliable than regex-parsing prose.
+    """
+    prompt = f"""Based on this summary, list exactly 3-5 key points as short bullet points.
+Return ONLY the bullet points, one per line, starting with "- ". No introduction or extra text.
+
+SUMMARY:
+{summary}
+
+KEY POINTS:"""
+
+    response = _call_llm_simple(prompt).strip()
+
+    # Parse lines that start with "-" or "•" into a clean list
+    points = []
+    for line in response.split("\n"):
+        line = line.strip().lstrip("-•").strip()
+        if line:
+            points.append(line)
+
+    return points[:5]  # cap at 5 even if LLM returns more

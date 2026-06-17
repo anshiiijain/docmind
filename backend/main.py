@@ -13,7 +13,7 @@ from ingest import ingest_file
 from database import search_collection, list_documents, delete_document, get_collection
 from llm import ask_llm, stream_llm, format_sources
 
-from analytics import get_topics, get_entities, get_keywords, get_doc_stats
+from analytics import get_topics, get_entities, get_keywords, get_doc_stats, get_summary
 
 # ── Logging setup ──────────────────────────────────────────────────────────────
 # logging > print() because: levels (DEBUG/INFO/ERROR), timestamps, can write to file
@@ -317,6 +317,19 @@ def doc_topics(filename: str):
     Call this last or in background.
     """
     result = get_topics(filename)
+    if "error" in result:
+        raise HTTPException(status_code=404, detail=result["error"])
+    return result
+
+@app.get("/analytics/summary/{filename}")
+def doc_summary(filename: str, refresh: bool = False):
+    """
+    Generate or retrieve cached document summary using map-reduce.
+    Slowest endpoint — multiple LLM calls for large docs.
+
+    ?refresh=true bypasses the cache and regenerates the summary.
+    """
+    result = get_summary(filename, force_refresh=refresh)
     if "error" in result:
         raise HTTPException(status_code=404, detail=result["error"])
     return result
