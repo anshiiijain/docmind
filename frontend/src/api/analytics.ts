@@ -40,6 +40,14 @@ export interface Topic {
   chunk_count: number
 }
 
+export interface SummaryResult {
+  filename:    string
+  summary:     string
+  key_points:  string[]
+  chunks_used: number
+  from_cache:  boolean
+}
+
 // ── API calls ──────────────────────────────────────────────────────────────────
 
 async function get<T>(path: string): Promise<T> {
@@ -65,6 +73,10 @@ export const analyticsApi = {
   topics:   (filename: string) =>
     get<{ topics: Topic[]; total_chunks: number }>(
       `/analytics/topics/${encodeURIComponent(filename)}`),
+
+  summary: (filename: string, refresh = false) =>
+    get<SummaryResult>(
+      `/analytics/summary/${encodeURIComponent(filename)}${refresh ? '?refresh=true' : ''}`),
 }
 
 // Keep old mock exports so existing imports don't break

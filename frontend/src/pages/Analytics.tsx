@@ -3,9 +3,9 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts'
 import { analyticsApi as mlApi } from '@/api/analytics'
-import type { DocStats, Keyword, EntityMap, Topic } from '@/api/analytics'
 import { getDocumentsFromBackend as getDocs } from '@/api/documents'
 
+import type { DocStats, Keyword, EntityMap, Topic, SummaryResult } from '@/api/analytics'
 const chartStyle = {
   tick:    { fontSize: 12, fill: '#8a8f98' },
   grid:    '#23252a',
@@ -21,6 +21,7 @@ export default function Analytics() {
   const [topics,    setTopics]    = useState<Topic[]>([])
   const [loading,   setLoading]   = useState<Record<string, boolean>>({})
   const [errors,    setErrors]    = useState<Record<string, string>>({})
+  const [summary, setSummary] = useState<SummaryResult | null>(null)
 
   useEffect(() => {
     getDocs()
@@ -52,6 +53,12 @@ export default function Analytics() {
       .then(setStats)
       .catch(e => setErr('stats', e.message))
       .finally(() => setLoad('stats', false))
+
+    setLoad('summary', true)
+  mlApi.summary(filename)
+    .then(setSummary)
+    .catch(e => setErr('summary', e.message))
+    .finally(() => setLoad('summary', false))
 
     setLoad('keywords', true)
     mlApi.keywords(filename)
