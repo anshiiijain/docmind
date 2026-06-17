@@ -13,6 +13,8 @@ from ingest import ingest_file
 from database import search_collection, list_documents, delete_document, get_collection
 from llm import ask_llm, stream_llm, format_sources
 
+from analytics import get_topics, get_entities, get_keywords, get_doc_stats
+
 # ── Logging setup ──────────────────────────────────────────────────────────────
 # logging > print() because: levels (DEBUG/INFO/ERROR), timestamps, can write to file
 logging.basicConfig(
@@ -268,6 +270,56 @@ def get_documents():
 
     return {"documents": docs, "total": len(docs)}
 
+# ── Analytics endpoints ────────────────────────────────────────────────────────
+
+@app.get("/analytics/stats/{filename}")
+def doc_stats(filename: str):
+    """
+    Basic document statistics.
+    Fast — no heavy ML, just counting from stored chunks.
+    Call this first to show instant stats while other endpoints load.
+    """
+    result = get_doc_stats(filename)
+    if "error" in result:
+        raise HTTPException(status_code=404, detail=result["error"])
+    return result
+
+
+@app.get("/analytics/keywords/{filename}")
+def doc_keywords(filename: str):
+    """
+    KeyBERT keyword extraction.
+    Medium speed — embedding comparison, ~2-5 seconds.
+    """
+    result = get_keywords(filename)
+    if "error" in result:
+        raise HTTPException(status_code=404, detail=result["error"])
+    return result
+
+
+@app.get("/analytics/entities/{filename}")
+def doc_entities(filename: str):
+    """
+    spaCy Named Entity Recognition.
+    Fast — spaCy is optimized for speed, ~1-3 seconds.
+    """
+    result = get_entities(filename)
+    if "error" in result:
+        raise HTTPException(status_code=404, detail=result["error"])
+    return result
+
+
+@app.get("/analytics/topics/{filename}")
+def doc_topics(filename: str):
+    """
+    BERTopic topic modeling.
+    Slow — clustering is expensive, ~10-30 seconds for large docs.
+    Call this last or in background.
+    """
+    result = get_topics(filename)
+    if "error" in result:
+        raise HTTPException(status_code=404, detail=result["error"])
+    return result
 
 @app.delete("/documents/{filename}")
 def delete_doc(filename: str):

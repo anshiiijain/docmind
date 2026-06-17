@@ -1,29 +1,79 @@
-// import client from './client'
+// frontend/src/api/analytics.ts
 
-// ─── Types ───────────────────────────────────────────────
-export interface TaskStatusData {
-  status: string
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+export interface DocStats {
+  filename:         string
+  chunk_count:      number
+  word_count:       number
+  char_count:       number
+  avg_chunk_length: number
+  reading_time_mins: number
+  language:         string
+}
+
+export interface Keyword {
+  keyword: string
+  score:   number
+}
+
+export interface Entity {
+  text:  string
   count: number
 }
 
-export interface DocsOverTimeData {
-  month: string
-  docs: number
+export interface EntityMap {
+  PERSON?:  Entity[]
+  ORG?:     Entity[]
+  GPE?:     Entity[]
+  DATE?:    Entity[]
+  MONEY?:   Entity[]
+  PRODUCT?: Entity[]
 }
 
-export interface FileTypeData {
-  name: string
-  value: number
+export interface Topic {
+  topic_id:    number
+  label:       string
+  keywords:    string[]
+  chunk_count: number
 }
 
-// ─── Mock data (remove when backend is ready) ────────────
-export const tasksByStatus: TaskStatusData[] = [
+// ── API calls ──────────────────────────────────────────────────────────────────
+
+async function get<T>(path: string): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.detail || `Request failed: ${res.status}`)
+  }
+  return res.json()
+}
+
+export const analyticsApi = {
+  stats:    (filename: string) =>
+    get<DocStats>(`/analytics/stats/${encodeURIComponent(filename)}`),
+
+  keywords: (filename: string) =>
+    get<{ keywords: Keyword[] }>(`/analytics/keywords/${encodeURIComponent(filename)}`),
+
+  entities: (filename: string) =>
+    get<{ entities: EntityMap; total_chunks_analyzed: number }>(
+      `/analytics/entities/${encodeURIComponent(filename)}`),
+
+  topics:   (filename: string) =>
+    get<{ topics: Topic[]; total_chunks: number }>(
+      `/analytics/topics/${encodeURIComponent(filename)}`),
+}
+
+// Keep old mock exports so existing imports don't break
+export const tasksByStatus = [
   { status: 'To do',       count: 8  },
   { status: 'In progress', count: 5  },
   { status: 'Done',        count: 12 },
 ]
-
-export const docsOverTime: DocsOverTimeData[] = [
+export const docsOverTime = [
   { month: 'Jan', docs: 2  },
   { month: 'Feb', docs: 5  },
   { month: 'Mar', docs: 4  },
@@ -31,27 +81,9 @@ export const docsOverTime: DocsOverTimeData[] = [
   { month: 'May', docs: 7  },
   { month: 'Jun', docs: 14 },
 ]
-
-export const fileTypes: FileTypeData[] = [
+export const fileTypes = [
   { name: 'PDF',  value: 12 },
   { name: 'DOCX', value: 6  },
   { name: 'TXT',  value: 4  },
   { name: 'CSV',  value: 3  },
 ]
-
-// ─── Real API calls (uncomment when backend is ready) ────
-
-// export async function getTasksByStatus(): Promise<TaskStatusData[]> {
-//   const response = await client.get('/analytics/tasks-by-status')
-//   return response.data
-// }
-
-// export async function getDocsOverTime(): Promise<DocsOverTimeData[]> {
-//   const response = await client.get('/analytics/docs-over-time')
-//   return response.data
-// }
-
-// export async function getFileTypes(): Promise<FileTypeData[]> {
-//   const response = await client.get('/analytics/file-types')
-//   return response.data
-// }
