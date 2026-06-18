@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
 import type { DropResult } from '@hello-pangea/dnd'
-import { getTasks, createTask, deleteTask } from '@/api/tasks'
+import { getTasks, createTask, updateTask, deleteTask } from '@/api/tasks'
 import type { Task, TaskStatus, TaskPriority } from '@/types'
 import TaskCard from '@/components/TaskCard'
 import AddTaskModal from '@/components/AddTaskModal'
@@ -22,48 +22,90 @@ const colAccent: Record<TaskStatus, string> = {
 export default function Tasks() {
   const [tasks, setTasks]         = useState<Task[]>([])
   const [loading, setLoading]     = useState(true)
+  const [error, setError]         = useState<string | null>(null)
   const [showModal, setShowModal] = useState(false)
 
   useEffect(() => {
-    getTasks().then(data => {
-      setTasks(data)
-      setLoading(false)
-    })
+    getTasks()
+      .then(data => setTasks(data))
+      .catch(() => setError('Could not load tasks. Is the backend running?'))
+      .finally(() => setLoading(false))
   }, [])
 
   function getCol(status: TaskStatus) {
     return tasks.filter(t => t.status === status)
   }
 
-  function onDragEnd(result: DropResult) {
+  async function onDragEnd(result: DropResult) {
     const { destination, source, draggableId } = result
     if (!destination) return
     if (destination.droppableId === source.droppableId &&
         destination.index === source.index) return
+
+    const newStatus = destination.droppableId as TaskStatus
+
+    // Optimistic update — feel instant
     setTasks(prev => prev.map(t =>
-      t.id === draggableId
-        ? { ...t, status: destination.droppableId as TaskStatus }
-        : t
+      t.id === draggableId ? { ...t, status: newStatus } : t
     ))
-    toast.success('Task moved')
+
+    try {
+      await updateTask(draggableId, { status: newStatus })
+      toast.success('Task moved')
+    } catch {
+      // Roll back on failure
+      setTasks(prev => prev.map(t =>
+        t.id === draggableId ? { ...t, status: source.droppableId as TaskStatus } : t
+      ))
+      toast.error('Failed to move task')
+    }
   }
 
   async function handleAdd(title: string, priority: TaskPriority, status: TaskStatus) {
-    const newTask = await createTask({ title, priority, status })
-    setTasks(prev => [...prev, newTask])
-    toast.success('Task created')
+    try {
+      const newTask = await createTask({ title, priority, status })
+      setTasks(prev => [...prev, newTask])
+      toast.success('Task created')
+    } catch {
+      toast.error('Failed to create task')
+    }
   }
 
   async function handleDelete(id: string) {
     const confirmed = window.confirm('Delete this task? This cannot be undone.')
     if (!confirmed) return
-    await deleteTask(id)
+    // Optimistic
+    const previous = tasks
     setTasks(prev => prev.filter(t => t.id !== id))
-    toast.success('Task deleted')
+    try {
+      await deleteTask(id)
+      toast.success('Task deleted')
+    } catch {
+      setTasks(previous)
+      toast.error('Failed to delete task')
+    }
   }
 
   if (loading) return (
-    <div className="p-8 text-ink-subtle">Loading tasks...</div>
+    <div className="p-8 grid grid-cols-3 gap-4">
+      {[0,1,2].map(i => (
+        <div key={i} className="bg-s1 rounded-lg p-3 border border-hairline animate-pulse"
+          style={{ minHeight: 200 }} />
+      ))}
+    </div>
+  )
+
+  if (error) return (
+    <div className="p-8">
+      <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm">
+        {error}
+        <button
+          onClick={() => { setError(null); setLoading(true); getTasks().then(setTasks).catch(() => setError('Still failing.')).finally(() => setLoading(false)) }}
+          className="ml-3 underline">
+          Retry
+        </button>
+      </div>
+    </div>
   )
 
   return (
@@ -91,9 +133,7 @@ export default function Tasks() {
                     ${snapshot.isDraggingOver ? 'border-hairline-strong' : ''}`}
                   style={{ minHeight: 200 }}>
                   <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-sm font-medium text-ink-subtle">
-                      {col.title}
-                    </h2>
+                    <h2 className="text-sm font-medium text-ink-subtle">{col.title}</h2>
                     <span className="text-xs bg-s3 text-ink-subtle px-2 py-0.5 rounded-pill">
                       {getCol(col.id).length}
                     </span>

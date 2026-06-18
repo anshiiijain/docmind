@@ -8,6 +8,7 @@ export interface User {
   email: string
   name: string
   createdAt: string
+  doc_name?: string | null
 }
 
 export interface Document {
@@ -49,6 +50,7 @@ export interface Task {
   status: TaskStatus
   priority: TaskPriority
   createdAt: string
+  doc_name?: string | null
 }
 
 export interface Column {
