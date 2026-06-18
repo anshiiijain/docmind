@@ -132,6 +132,49 @@ export default function Analytics() {
             ) : null}
           </div>
 
+          {/* ── Summary ── */}
+          <Card title="Summary" subtitle="Map-reduce — first load may take 1-2 min for large docs">
+            {loading.summary ? (
+              <SkeletonBlock text="Generating summary... this may take a minute for large documents" />
+            ) : errors.summary ? (
+              <ErrorText msg={errors.summary} />
+            ) : summary ? (
+              <div>
+                <p className="text-sm text-ink-muted leading-relaxed mb-4">
+                  {summary.summary}
+                </p>
+                {summary.key_points.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-ink-tertiary mb-2">
+                      Key Points
+                    </p>
+                    <ul className="space-y-1.5">
+                      {summary.key_points.map((point, i) => (
+                        <li key={i} className="text-sm text-ink-muted flex gap-2">
+                          <span className="text-primary mt-0.5">•</span>
+                          <span>{point}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <button
+                  onClick={() => {
+                    setLoad('summary', true)
+                    mlApi.summary(selected, true)  // force refresh
+                      .then(setSummary)
+                      .catch(e => setErr('summary', e.message))
+                      .finally(() => setLoad('summary', false))
+                  }}
+                  className="mt-4 text-xs text-ink-tertiary hover:text-primary-hover"
+                >
+                  ↻ Regenerate summary
+                </button>
+              </div>
+            ) : null}
+          </Card>
+
+          
           {/* ── Keywords chart ── */}
           <Card title="Top Keywords" subtitle="KeyBERT — semantic relevance">
             {loading.keywords ? (

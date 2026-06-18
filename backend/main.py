@@ -1,12 +1,15 @@
 import os
 import shutil
 import logging
-from fastapi import FastAPI, UploadFile, File, HTTPException, Request
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, validator
 import json
+
+from sqlalchemy.orm import Session
+from db_tasks import get_db, db_get_tasks, db_create_task, db_update_task, db_delete_task
 
 from config import settings
 from ingest import ingest_file
@@ -73,6 +76,31 @@ class ChatRequest(BaseModel):
             raise ValueError("Question cannot be empty")
         return v.strip()
 
+
+class TaskCreateSchema(BaseModel):
+    title:       str
+    priority:    str = "medium"
+    status:      str = "todo"
+    description: str | None = None
+    doc_name:    str | None = None
+
+class TaskUpdateSchema(BaseModel):
+    title:       str | None = None
+    priority:    str | None = None
+    status:      str | None = None
+    description: str | None = None
+    doc_name:    str | None = None
+
+def task_to_dict(task) -> dict:
+    return {
+        "id":          task.id,
+        "title":       task.title,
+        "description": task.description,
+        "status":      task.status.value if hasattr(task.status, 'value') else task.status,
+        "priority":    task.priority.value if hasattr(task.priority, 'value') else task.priority,
+        "doc_name":    task.doc_name,
+        "createdAt":   task.created_at.isoformat(),
+    }
 
 # ── Custom Exception Handlers ──────────────────────────────────────────────────
 # These run when FastAPI catches specific error types.
@@ -333,6 +361,37 @@ def doc_summary(filename: str, refresh: bool = False):
     if "error" in result:
         raise HTTPException(status_code=404, detail=result["error"])
     return result
+
+@app.get("/tasks")
+def get_tasks(status: str = None, db: Session = Depends(get_db)):
+    tasks = db_get_tasks(db, status=status)
+    return [task_to_dict(t) for t in tasks]
+
+@app.post("/tasks", status_code=201)
+def create_task(body: TaskCreateSchema, db: Session = Depends(get_db)):
+    task = db_create_task(
+        db,
+        title       = body.title,
+        priority    = body.priority,
+        status      = body.status,
+        description = body.description,
+        doc_name    = body.doc_name,
+    )
+    return task_to_dict(task)
+
+@app.put("/tasks/{task_id}")
+def update_task(task_id: str, body: TaskUpdateSchema, db: Session = Depends(get_db)):
+    task = db_update_task(db, task_id, body.model_dump(exclude_none=True))
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task_to_dict(task)
+
+@app.delete("/tasks/{task_id}")
+def delete_task(task_id: str, db: Session = Depends(get_db)):
+    ok = db_delete_task(db, task_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return {"deleted": task_id}
 
 @app.delete("/documents/{filename}")
 def delete_doc(filename: str):
