@@ -40,3 +40,15 @@ class Settings:
 
 
 settings = Settings()
+# Auth
+import secrets
+class AuthSettings:
+    secret_key: str     = os.getenv("SECRET_KEY", secrets.token_hex(32))
+    algorithm: str      = "HS256"
+    token_expire_mins: int = int(os.getenv("TOKEN_EXPIRE_MINS", "60"))
+    # Single user credentials (stored in .env, never hardcoded)
+    admin_email: str    = os.getenv("ADMIN_EMAIL", "admin@docmind.com")
+    admin_password: str = os.getenv("ADMIN_PASSWORD", "changeme123")
+    admin_name: str     = os.getenv("ADMIN_NAME", "Admin")
+
+auth_settings = AuthSettings()

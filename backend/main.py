@@ -11,12 +11,15 @@ import json
 from sqlalchemy.orm import Session
 from db_tasks import get_db, db_get_tasks, db_create_task, db_update_task, db_delete_task
 
-from config import settings
+from config import settings, auth_settings
 from ingest import ingest_file
 from database import search_collection, list_documents, delete_document, get_collection
 from llm import ask_llm, stream_llm, format_sources
 
 from analytics import get_topics, get_entities, get_keywords, get_doc_stats, get_summary
+
+from auth import verify_password, create_access_token, get_current_user
+from datetime import datetime
 
 # ── Logging setup ──────────────────────────────────────────────────────────────
 # logging > print() because: levels (DEBUG/INFO/ERROR), timestamps, can write to file
@@ -90,6 +93,18 @@ class TaskUpdateSchema(BaseModel):
     status:      str | None = None
     description: str | None = None
     doc_name:    str | None = None
+# ── Auth schemas ───────────────────────────────────────────────────────────────
+
+class LoginSchema(BaseModel):
+    email:    str
+    password: str
+
+class RegisterSchema(BaseModel):
+    name:     str
+    email:    str
+    password: str
+
+# ── Auth endpoints ─────────────────────────────────────────────────────────────
 
 def task_to_dict(task) -> dict:
     return {
@@ -130,6 +145,58 @@ async def general_error_handler(request: Request, exc: Exception):
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
+
+@app.post("/auth/login")
+def login(body: LoginSchema):
+    if body.email != auth_settings.admin_email or not verify_password(body.password):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    token = create_access_token({
+        "sub":  auth_settings.admin_email,
+        "name": auth_settings.admin_name,
+    })
+    return {
+        "token": token,
+        "user": {
+            "id":        "1",
+            "name":      auth_settings.admin_name,
+            "email":     auth_settings.admin_email,
+            "createdAt": datetime.utcnow().isoformat(),
+        }
+    }
+
+@app.post("/auth/register")
+def register(body: RegisterSchema):
+    """
+    Single-user app: registration just checks the email matches .env
+    and updates the name. In a real app this would create a DB row.
+    """
+    if body.email != auth_settings.admin_email:
+        raise HTTPException(status_code=400, detail="Registration is invite-only")
+    if not verify_password(body.password):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    token = create_access_token({
+        "sub":  auth_settings.admin_email,
+        "name": body.name,
+    })
+    return {
+        "token": token,
+        "user": {
+            "id":        "1",
+            "name":      body.name,
+            "email":     body.email,
+            "createdAt": datetime.utcnow().isoformat(),
+        }
+    }
+
+@app.get("/auth/me")
+def get_me(current_user: dict = Depends(get_current_user)):
+    """Validates token and returns user info. Frontend calls this on app load."""
+    return {
+        "id":        "1",
+        "name":      current_user["name"],
+        "email":     current_user["email"],
+        "createdAt": datetime.utcnow().isoformat(),
+    }
 
 @app.get("/")
 def health_check():
